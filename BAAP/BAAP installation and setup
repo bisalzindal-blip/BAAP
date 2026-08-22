@@ -1,5 +1,5 @@
+# NOTE: Copy and run the entire cell in Google Colab to run BAAP.
 # BAAP — CLEAN INSTALL, CLONE AND RUN
-# NOTE:
 # This cell installs the required Python dependencies, downloads the latest
 # BAAP source code from GitHub, configures the BAAP source path, and verifies
 # that Biopython/SeqIO is available.
