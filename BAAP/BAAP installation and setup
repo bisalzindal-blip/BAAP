@@ -1,0 +1,34 @@
+# BAAP — INSTALL, CLONE AND SETUP
+
+# 1. Install Python dependencies
+!pip install -q biopython pandas numpy requests tqdm openpyxl
+
+# 2. Remove previous BAAP installation and runtime data
+!rm -rf /content/BAAP
+!rm -rf /content/protease_pipeline
+
+# 3. Clone the latest BAAP repository
+!git clone -q https://github.com/bisalzindal-blip/BAAP.git /content/BAAP
+
+# 4. Add BAAP source directory
+import sys
+
+BAAP_SRC = "/content/BAAP/BAAP/src"
+
+if BAAP_SRC not in sys.path:
+    sys.path.insert(0, BAAP_SRC)
+
+# 5. Verify Biopython / SeqIO
+from Bio import SeqIO
+
+# 6. Import BAAP
+from baap import run_pipeline
+
+print("=" * 80)
+print("BAAP v1.0")
+print("=" * 80)
+print(f"BAAP source : {BAAP_SRC}")
+print(f"Biopython   : available")
+print(f"SeqIO       : available")
+print("BAAP installed and ready.")
+print()
