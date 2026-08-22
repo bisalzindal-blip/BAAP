@@ -1,42 +1,78 @@
-"""BAAP — Bacterial Annotation & Analysis of Proteases
+"""BAAP — Bacterial Annotation & Analysis of Proteases.
 
 BAAP is a bioinformatics pipeline for identifying and classifying
-proteases from bacterial genomes using Prokka, MEROPS DIAMOND
-screening, and InterProScan domain validation.
+proteases from bacterial genomes using genome annotation, MEROPS
+screening, and InterProScan/domain evidence.
 """
 
-__version__ = "1.0"
+__version__ = "1.0.0"
 __name__ = "BAAP"
 
+# Core pipeline
 from .pipeline import run_pipeline
-from .genome import validate_genome, get_genome_stats
-from .prokka import run_prokka, parse_prokka
-from .merops import screen_merops
-from .interproscan import run_interproscan_rest
+
+# Genome utilities
+from .genome import (
+    validate_genome,
+    get_genome_stats,
+)
+
+# Prokka
+from .prokka import (
+    run_prokka,
+    parse_prokka,
+)
+
+# MEROPS
+from .merops import (
+    screen_merops,
+)
+
+# InterProScan
+from .interproscan import (
+    run_interproscan_rest,
+)
+
+# Classification
 from .classification import (
-    classify_merops_hit,
     evaluate_domain_evidence,
     detect_protease_class,
-    validate_domains
 )
+
+# Reporting
 from .reporting import (
     create_final_audit,
     create_complete_zip,
-    save_manifest
+    save_manifest,
 )
 
 __all__ = [
+    # Package
+    "__version__",
+    "__name__",
+
+    # Pipeline
     "run_pipeline",
+
+    # Genome
     "validate_genome",
     "get_genome_stats",
+
+    # Prokka
     "run_prokka",
     "parse_prokka",
+
+    # MEROPS
     "screen_merops",
+
+    # InterProScan
     "run_interproscan_rest",
-    "classify_merops_hit",
+
+    # Classification
     "evaluate_domain_evidence",
     "detect_protease_class",
-    "validate_domains",
+
+    # Reporting
     "create_final_audit",
     "create_complete_zip",
     "save_manifest",
