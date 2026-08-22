@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-from Bio import SeqIO  # This was missing!
+
+# Try to import Biopython with error handling
+try:
+    from Bio import SeqIO
+except ImportError:
+    raise ImportError(
+        "Biopython is required but not installed. "
+        "Please install it with: pip install biopython"
+    )
 
 from .config import (
     DIRS,
@@ -121,6 +129,7 @@ def _download_with_wget(url, output_path, timeout=600):
     try:
         log.info("Attempting download with wget from: %s", url)
         
+        # Try with different options for better compatibility
         commands = [
             [
                 "wget",
@@ -135,6 +144,11 @@ def _download_with_wget(url, output_path, timeout=600):
             [
                 "wget",
                 "--no-check-certificate",
+                "-O", str(output_path),
+                url
+            ],
+            [
+                "wget",
                 "-O", str(output_path),
                 url
             ]
@@ -207,6 +221,39 @@ def _download_with_curl(url, output_path, timeout=600):
         return False
 
 
+def _download_with_python_fallback(url, output_path):
+    """Simple Python download as final fallback."""
+    try:
+        log.info("Attempting Python-based download from: %s", url)
+        import urllib.request
+        
+        # Set up request with proper headers
+        req = urllib.request.Request(
+            url,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
+        
+        with urllib.request.urlopen(req, timeout=600) as response:
+            with open(output_path, 'wb') as out_file:
+                data = response.read()
+                out_file.write(data)
+        
+        if output_path.exists() and output_path.stat().st_size > 0:
+            log.info("Python download completed: %.2f MB", output_path.stat().st_size / (1024 * 1024))
+            return True
+        else:
+            log.warning("Python download produced empty file")
+            return False
+            
+    except Exception as exc:
+        log.warning("Python download failed: %s", exc)
+        if output_path.exists():
+            output_path.unlink()
+        return False
+
+
 def _download_merops():
     """Download the MEROPS peptide-unit library safely with multiple methods."""
     
@@ -221,7 +268,8 @@ def _download_merops():
     download_methods = [
         _download_with_requests,
         _download_with_wget,
-        _download_with_curl
+        _download_with_curl,
+        _download_with_python_fallback
     ]
     
     for method in download_methods:
@@ -245,7 +293,12 @@ def _download_merops():
         "Alternatively, try downloading it directly in a Colab cell:\n\n"
         "!wget -O /content/protease_pipeline/merops/pepunit.lib "
         "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib\n\n"
-        "After uploading the file, run the pipeline again."
+        "Or using curl:\n"
+        "!curl -L -o /content/protease_pipeline/merops/pepunit.lib "
+        "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib\n\n"
+        "After uploading the file, run the pipeline again.\n\n"
+        "If the file is large, ensure you have sufficient disk space and "
+        "a stable internet connection."
     )
 
 
@@ -261,7 +314,8 @@ def _validate_merops_fasta():
         raise RuntimeError(
             "Downloaded MEROPS file does not appear to be a FASTA file.\n"
             f"File: {MEROPS_RAW}\n"
-            f"First line: {first_line[:200]}"
+            f"First line: {first_line[:200]}\n"
+            "This might indicate the file is corrupted or not properly downloaded."
         )
 
 
@@ -337,7 +391,8 @@ def download_and_prepare_merops():
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"DIAMOND database build failed: {e.stderr.decode() if e.stderr else str(e)}")
+            error_msg = e.stderr.decode() if e.stderr else str(e)
+            raise RuntimeError(f"DIAMOND database build failed: {error_msg}")
     else:
         log.info("Existing DIAMOND MEROPS database detected. Skipping database construction.")
     
