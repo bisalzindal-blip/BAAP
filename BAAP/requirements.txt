@@ -1,0 +1,18 @@
+biopython>=1.83
+pandas>=2.0
+numpy>=1.24
+requests>=2.31
+tqdm>=4.65
+openpyxl>=3.1
+Important external dependencies
+
+The Python packages above are not the complete software requirements for BAAP. The pipeline also uses external bioinformatics software and resources, including:
+- Prokka
+- DIAMOND
+- MEROPS
+- InterProScan REST API
+- Miniforge/Conda
+
+Prokka and its database are configured by the BAAP workflow when running in Google Colab.
+
+Note: BAAP is currently designed primarily for Google Colab/Linux environments. Some components, particularly Prokka and DIAMOND, require a compatible Linux environment.
