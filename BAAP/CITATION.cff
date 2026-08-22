@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+
+title: "BAAP: Bacterial Annotation & Analysis of Proteases"
+
+version: "1.0.0"
+
+type: software
+
+message: "If you use BAAP in your research, please cite this software."
+
+authors:
+  - family-names: "Zindal"
+    given-names: "Bisal"
+
+abstract: >
+  BAAP (Bacterial Annotation & Analysis of Proteases) is an open-source
+  bioinformatics pipeline for genome-scale identification, annotation,
+  classification, and validation of bacterial proteases. The pipeline
+  integrates genome annotation, MEROPS-based similarity screening,
+  InterProScan/Pfam domain evidence, protease classification, evidence
+  evaluation, and structured reporting to distinguish supported proteases
+  from putative, inactive, non-protease, and review candidates.
+
+keywords:
+  - bacterial proteases
+  - protease annotation
+  - protease classification
+  - bacterial genome
+  - bioinformatics
+  - MEROPS
+  - InterProScan
+  - Pfam
+  - Prokka
+  - protein annotation
+  - computational biology
+  - genome annotation
+  - peptidases
+
+license: "MIT"
+
+doi: "10.5281/zenodo.22054544"
+
+url: "https://github.com/bisalzindal-blip/BAAP"
+
+repository-code: "https://github.com/bisalzindal-blip/BAAP"
+
+date-released: "2026-08-22"
