@@ -64,9 +64,9 @@ def download_and_prepare_merops():
 
     MEROPS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------
+
     # Download MEROPS
-    # ------------------------------------------------------------
+ 
     if not MEROPS_RAW.exists() or MEROPS_RAW.stat().st_size == 0:
         log.info("Downloading MEROPS database...")
 
@@ -87,9 +87,9 @@ def download_and_prepare_merops():
             f"MEROPS download failed or produced an empty file: {MEROPS_RAW}"
         )
 
-    # ------------------------------------------------------------
+
     # Convert MEROPS library to FASTA
-    # ------------------------------------------------------------
+
     if not MEROPS_FASTA.exists() or MEROPS_FASTA.stat().st_size == 0:
 
         log.info("Converting MEROPS library to FASTA...")
@@ -119,9 +119,9 @@ def download_and_prepare_merops():
 
         log.info("MEROPS FASTA sequences prepared: %d", count)
 
-    # ------------------------------------------------------------
+   
     # Build DIAMOND database
-    # ------------------------------------------------------------
+  
     if not MEROPS_DMND.exists() or MEROPS_DMND.stat().st_size == 0:
 
         log.info("Building DIAMOND MEROPS database...")
@@ -283,9 +283,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         names=DIAMOND_COLUMNS,
     )
 
-    # ------------------------------------------------------------
+
     # Numeric conversion
-    # ------------------------------------------------------------
+
     numeric_cols = [
         "Percent_Identity",
         "Alignment_Length",
@@ -307,9 +307,8 @@ def screen_merops(prokka_faa, prokka_annotation_map):
             errors="coerce",
         )
 
-    # ------------------------------------------------------------
     # Coverage
-    # ------------------------------------------------------------
+
     df["Query_Coverage"] = (
         (df["Qend"] - df["Qstart"] + 1)
         / df["Query_Length"]
@@ -320,9 +319,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         / df["Subject_Length"]
     ) * 100
 
-    # ------------------------------------------------------------
+ 
     # MEROPS annotation
-    # ------------------------------------------------------------
+   
     df["MEROPS_Family"] = df["Subject_Title"].apply(
         extract_merops_family
     )
@@ -337,9 +336,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .fillna("")
     )
 
-    # ------------------------------------------------------------
+
     # Hit classification
-    # ------------------------------------------------------------
+
     df["Status"] = df.apply(
         classify_merops_hit,
         axis=1,
@@ -350,9 +349,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         index=False,
     )
 
-    # ------------------------------------------------------------
+  
     # Best hit per query
-    # ------------------------------------------------------------
+
     best_hits = (
         df.sort_values(
             by=[
@@ -397,9 +396,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .copy()
     )
 
-    # ------------------------------------------------------------
+
     # No-hit proteins
-    # ------------------------------------------------------------
+
     all_query_ids = set(
         prokka_annotation_map.keys()
     )
@@ -433,9 +432,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         nohit_rows
     )
 
-    # ------------------------------------------------------------
+
     # Save outputs
-    # ------------------------------------------------------------
+
     passed.to_csv(
         MEROPS_PASS,
         index=False,
@@ -451,9 +450,9 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         index=False,
     )
 
-    # ------------------------------------------------------------
+
     # Summary
-    # ------------------------------------------------------------
+   
     summary = pd.DataFrame(
         {
             "Metric": [
