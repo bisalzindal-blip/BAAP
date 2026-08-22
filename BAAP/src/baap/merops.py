@@ -36,11 +36,8 @@ MEROPS_DMND = Path(str(MEROPS_DB) + ".dmnd")
 DIAMOND_RESULTS = MEROPS_DIR / "diamond_results.tsv"
 
 MEROPS_URLS = [
-    "https://ftp.ebi.ac.uk/pub/databases/merops/"
-    "current_release/pepunit.lib",
-
-    "http://ftp.ebi.ac.uk/pub/databases/merops/"
-    "current_release/pepunit.lib",
+   "https://ftp.ebi.ac.uk/pub/databases/"
+    "merops/current_release/pepunit.lib",
 ]
 
 
