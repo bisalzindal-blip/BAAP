@@ -22,10 +22,14 @@ BAAP accepts a bacterial whole-genome nucleotide FASTA file:
 ### Major tools and databases 
 - Prokka 
 - DIAMOND 
-- MEROPS 
+- MEROPS
 - InterProScan 
 - Pfam 
 - Gene Ontology 
 
 ### Output 
 BAAP generates detailed CSV/TSV files, FASTA files, an Excel annotation workbook, classification summaries, an audit table, and a complete ZIP archive of the analysis results. For detailed installation and usage instructions, see the complete documentation in this repository.
+
+## Citation
+If you use BAAP in your research, please cite:
+Zindal, B. (2026). BAAP: Bacterial Annotation & Analysis of Proteases(Version 1.0.0). Zenodo. https://doi.org/10.5281/zenodo.22054544
