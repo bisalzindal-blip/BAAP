@@ -63,6 +63,7 @@ DIAMOND_COLUMNS = [
 MEROPS_URLS = [
     "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib",
     "https://www.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib",
+    "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib",  # Keep trying
 ]
 
 
@@ -82,11 +83,19 @@ def _download_with_requests(url, output_path, timeout=600):
     try:
         log.info("Downloading from: %s", url)
         
-        with requests.get(
+        # Set up session with retries
+        session = requests.Session()
+        session.mount('http://', requests.adapters.HTTPAdapter(max_retries=3))
+        session.mount('https://', requests.adapters.HTTPAdapter(max_retries=3))
+        
+        with session.get(
             url,
             stream=True,
             timeout=(30, timeout),
-            headers={"User-Agent": "BAAP/1.0"}
+            headers={
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            },
+            verify=False  # Some FTP/HTTPS issues
         ) as response:
             response.raise_for_status()
             
@@ -100,7 +109,7 @@ def _download_with_requests(url, output_path, timeout=600):
                         downloaded += len(chunk)
                         if total_size > 0:
                             progress = (downloaded / total_size) * 100
-                            if int(progress) % 10 == 0:
+                            if progress % 10 < 1:  # Log every ~10%
                                 log.info("Download progress: %.0f%%", progress)
             
             if output_path.exists() and output_path.stat().st_size > 0:
@@ -115,40 +124,152 @@ def _download_with_requests(url, output_path, timeout=600):
                 
     except requests.RequestException as exc:
         log.warning("requests download failed: %s", exc)
+        if output_path.exists():
+            output_path.unlink()
         return False
 
 
 def _download_with_wget(url, output_path, timeout=600):
-    """Download a file using wget as fallback."""
+    """Download a file using wget with better error handling."""
     try:
         log.info("Attempting download with wget from: %s", url)
         
+        # Try with different options for better compatibility
+        commands = [
+            [
+                "wget",
+                "--no-check-certificate",
+                "--timeout", str(timeout),
+                "--tries", "5",
+                "--retry-connrefused",
+                "--waitretry", "5",
+                "-O", str(output_path),
+                url
+            ],
+            [
+                "wget",
+                "--no-check-certificate",
+                "-O", str(output_path),
+                url
+            ],
+            [
+                "wget",
+                "-O", str(output_path),
+                url
+            ]
+        ]
+        
+        for cmd in commands:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    timeout=timeout + 30
+                )
+                
+                if result.returncode == 0:
+                    if output_path.exists() and output_path.stat().st_size > 0:
+                        log.info(
+                            "wget download completed: %.2f MB",
+                            output_path.stat().st_size / (1024 * 1024)
+                        )
+                        return True
+                    else:
+                        log.warning("wget downloaded empty file")
+                        if output_path.exists():
+                            output_path.unlink()
+                else:
+                    log.warning("wget attempt failed with code %d", result.returncode)
+                    if output_path.exists():
+                        output_path.unlink()
+                        
+            except subprocess.TimeoutExpired:
+                log.warning("wget command timed out")
+                if output_path.exists():
+                    output_path.unlink()
+                continue
+                
+    except Exception as exc:
+        log.warning("wget download failed: %s", exc)
+        if output_path.exists():
+            output_path.unlink()
+        return False
+    
+    return False
+
+
+def _download_with_curl(url, output_path, timeout=600):
+    """Download a file using curl as fallback."""
+    try:
+        log.info("Attempting download with curl from: %s", url)
+        
         subprocess.run([
-            "wget",
-            "--no-check-certificate",
-            "--timeout", str(timeout),
-            "--tries", "3",
-            "-O", str(output_path),
+            "curl",
+            "-L",
+            "--max-time", str(timeout),
+            "--retry", "5",
+            "--retry-delay", "5",
+            "--insecure",
+            "-o", str(output_path),
             url
         ], check=True, capture_output=True)
         
         if output_path.exists() and output_path.stat().st_size > 0:
             log.info(
-                "wget download completed: %.2f MB",
+                "curl download completed: %.2f MB",
                 output_path.stat().st_size / (1024 * 1024)
             )
             return True
         else:
-            log.warning("wget downloaded empty file")
+            log.warning("curl downloaded empty file")
+            if output_path.exists():
+                output_path.unlink()
             return False
             
     except subprocess.CalledProcessError as exc:
-        log.warning("wget download failed with code %d: %s", exc.returncode, exc.stderr)
+        log.warning("curl download failed with code %d", exc.returncode)
         if output_path.exists():
             output_path.unlink()
         return False
     except FileNotFoundError:
-        log.warning("wget command not found in PATH")
+        log.warning("curl command not found in PATH")
+        return False
+
+
+def _download_with_python_fallback(url, output_path):
+    """Simple Python download as final fallback."""
+    try:
+        log.info("Attempting Python-based download from: %s", url)
+        import urllib.request
+        
+        # Set up request with proper headers
+        req = urllib.request.Request(
+            url,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
+        
+        with urllib.request.urlopen(req, timeout=600) as response:
+            with open(output_path, 'wb') as out_file:
+                data = response.read()
+                out_file.write(data)
+        
+        if output_path.exists() and output_path.stat().st_size > 0:
+            log.info(
+                "Python download completed: %.2f MB",
+                output_path.stat().st_size / (1024 * 1024)
+            )
+            return True
+        else:
+            log.warning("Python download produced empty file")
+            return False
+            
+    except Exception as exc:
+        log.warning("Python download failed: %s", exc)
+        if output_path.exists():
+            output_path.unlink()
         return False
 
 
@@ -162,18 +283,25 @@ def _download_merops():
         log.info("Existing MEROPS database found at: %s", MEROPS_RAW)
         return
     
-    # Try downloading with requests first (preferred)
-    for url in MEROPS_URLS:
-        if _download_with_requests(url, MEROPS_RAW):
-            return
+    # Try all download methods in order of preference
+    download_methods = [
+        _download_with_requests,
+        _download_with_wget,
+        _download_with_curl,
+        _download_with_python_fallback
+    ]
     
-    # If requests fails, try with wget
-    for url in MEROPS_URLS:
-        if _download_with_wget(url, MEROPS_RAW):
-            return
+    for method in download_methods:
+        for url in MEROPS_URLS:
+            log.info("Attempting download method: %s with URL: %s", method.__name__, url)
+            if method(url, MEROPS_RAW):
+                return
+            # Wait a moment between attempts
+            import time
+            time.sleep(1)
     
     # If all automatic downloads fail, provide manual instructions
-    raise RuntimeError(
+    error_msg = (
         "\n" + "=" * 80 + "\n"
         "ERROR: Unable to download the MEROPS peptide-unit library.\n"
         "=" * 80 + "\n\n"
@@ -182,11 +310,18 @@ def _download_merops():
         "2. Download the file: pepunit.lib\n"
         "3. Upload it to the following location in your Colab environment:\n"
         f"   {MEROPS_RAW}\n\n"
-        "Or try running this command in a Colab cell:\n\n"
+        "Alternatively, you can try downloading it directly in a Colab cell:\n\n"
         "!wget -O /content/protease_pipeline/merops/pepunit.lib "
         "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib\n\n"
-        "After uploading the file, run the pipeline again."
+        "Or using curl:\n"
+        "!curl -L -o /content/protease_pipeline/merops/pepunit.lib "
+        "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib\n\n"
+        "After uploading the file, run the pipeline again.\n\n"
+        "If the file is large, ensure you have sufficient disk space and "
+        "a stable internet connection."
     )
+    
+    raise RuntimeError(error_msg)
 
 
 def _validate_merops_fasta():
@@ -208,7 +343,8 @@ def _validate_merops_fasta():
         raise RuntimeError(
             "Downloaded MEROPS file does not appear to be a FASTA file.\n"
             f"File: {MEROPS_RAW}\n"
-            f"First line: {first_line[:200]}"
+            f"First line: {first_line[:200]}\n"
+            "This might indicate the file is corrupted or not properly downloaded."
         )
 
 
@@ -286,10 +422,10 @@ def download_and_prepare_merops():
 
             temporary_fasta.replace(MEROPS_FASTA)
 
-        except Exception:
+        except Exception as e:
             if temporary_fasta.exists():
                 temporary_fasta.unlink()
-            raise
+            raise RuntimeError(f"Failed to convert MEROPS to FASTA: {e}")
 
         log.info("MEROPS FASTA sequences prepared: %d", count)
 
@@ -302,17 +438,21 @@ def download_and_prepare_merops():
     if not (MEROPS_DMND.exists() and MEROPS_DMND.stat().st_size > 0):
         log.info("Building DIAMOND MEROPS database...")
 
-        subprocess.run(
-            [
-                "diamond",
-                "makedb",
-                "--in",
-                str(MEROPS_FASTA),
-                "--db",
-                str(MEROPS_DB),
-            ],
-            check=True,
-        )
+        try:
+            subprocess.run(
+                [
+                    "diamond",
+                    "makedb",
+                    "--in",
+                    str(MEROPS_FASTA),
+                    "--db",
+                    str(MEROPS_DB),
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"DIAMOND database build failed: {e.stderr.decode() if e.stderr else str(e)}")
 
     else:
         log.info(
@@ -384,7 +524,12 @@ def run_diamond(query_faa):
     ]
 
     log.info("Running DIAMOND BLASTP against MEROPS...")
-    subprocess.run(cmd, check=True)
+    
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        raise RuntimeError(f"DIAMOND BLASTP failed: {error_msg}")
 
 
 # MEROPS family extraction
