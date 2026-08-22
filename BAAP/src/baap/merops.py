@@ -4,8 +4,9 @@ import re
 import subprocess
 import logging
 from pathlib import Path
-
+from Bio import SeqIO
 import pandas as pd
+
 
 from .config import (
     DIRS, RESULTS_DIR, EVALUE_CUTOFF, IDENTITY_CUTOFF,
