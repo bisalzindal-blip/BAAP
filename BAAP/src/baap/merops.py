@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-from Bio import SeqIO
+from Bio import SeqIO  # This was missing!
 
 from .config import (
     DIRS,
@@ -469,6 +469,39 @@ def screen_merops(prokka_faa, prokka_annotation_map):
     # 3. Check DIAMOND results
     if not DIAMOND_RESULTS.exists() or DIAMOND_RESULTS.stat().st_size == 0:
         log.warning("No DIAMOND hits against MEROPS.")
+        
+        # Generate no-hit table
+        all_query_ids = set(prokka_annotation_map.keys())
+        nohit_rows = [
+            {
+                "Protein_ID": protein_id,
+                "Prokka_Annotation": prokka_annotation_map.get(protein_id, ""),
+                "Status": "NO_MEROPS_HIT",
+            }
+            for protein_id in sorted(all_query_ids)
+        ]
+        nohit_df = pd.DataFrame(nohit_rows)
+        nohit_df.to_csv(MEROPS_NOHIT, index=False)
+        
+        pd.DataFrame(
+            {
+                "Metric": [
+                    "Total proteins",
+                    "Proteins with MEROPS hit",
+                    "MEROPS PASS",
+                    "MEROPS failed",
+                    "No MEROPS hit",
+                ],
+                "Count": [
+                    len(all_query_ids),
+                    0,
+                    0,
+                    0,
+                    len(all_query_ids),
+                ],
+            }
+        ).to_csv(MEROPS_SUMMARY, index=False)
+        
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     
     # 4. Read DIAMOND results
