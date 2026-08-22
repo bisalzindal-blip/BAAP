@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pandas as pd
+import requests
 from Bio import SeqIO
 
 from .config import (
@@ -20,23 +21,37 @@ from .config import (
     log,
 )
 
+
+
 # MEROPS paths
+
+
 MEROPS_DIR = DIRS["merops"]
+
 MEROPS_RAW = MEROPS_DIR / "pepunit.lib"
 MEROPS_FASTA = MEROPS_DIR / "merops_cleaned.fasta"
+
 MEROPS_DB = MEROPS_DIR / "merops_db"
 MEROPS_DMND = Path(str(MEROPS_DB) + ".dmnd")
+
 DIAMOND_RESULTS = MEROPS_DIR / "diamond_results.tsv"
 
 MEROPS_URL = (
-    "https://ftp.ebi.ac.uk/pub/databases/merops/current_release/pepunit.lib"
+    "https://ftp.ebi.ac.uk/pub/databases/merops/"
+    "current_release/pepunit.lib"
 )
 
+
+
 # Output paths
+
+
 MEROPS_PASS = RESULTS_DIR / "MEROPS_PASS_hits.csv"
 MEROPS_FAILED = RESULTS_DIR / "MEROPS_failed_hits.csv"
 MEROPS_NOHIT = RESULTS_DIR / "MEROPS_no_hits.csv"
 MEROPS_SUMMARY = RESULTS_DIR / "MEROPS_summary.csv"
+
+# DIAMOND output columns
 
 DIAMOND_COLUMNS = [
     "Query_ID",
@@ -57,42 +72,93 @@ DIAMOND_COLUMNS = [
 ]
 
 
+# Download and prepare MEROPS
+
+
 def download_and_prepare_merops():
     """Download MEROPS and prepare a DIAMOND-compatible database."""
 
     stage("PREPARING MEROPS")
 
-    MEROPS_DIR.mkdir(parents=True, exist_ok=True)
+    MEROPS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
 
-    # Download MEROPS
- 
-    if not MEROPS_RAW.exists() or MEROPS_RAW.stat().st_size == 0:
+    # Download MEROPS database
+
+
+    if not (
+        MEROPS_RAW.exists()
+        and MEROPS_RAW.stat().st_size > 0
+    ):
+
         log.info("Downloading MEROPS database...")
 
-        subprocess.run(
-            [
-                "wget",
-                "-q",
-                "--show-progress",
-                "-O",
-                str(MEROPS_RAW),
+        try:
+
+            response = requests.get(
                 MEROPS_URL,
-            ],
-            check=True,
+                stream=True,
+                timeout=120,
+            )
+
+            response.raise_for_status()
+
+            with open(
+                MEROPS_RAW,
+                "wb",
+            ) as outfile:
+
+                for chunk in response.iter_content(
+                    chunk_size=1024 * 1024
+                ):
+
+                    if chunk:
+                        outfile.write(chunk)
+
+        except requests.RequestException as exc:
+
+            # Remove incomplete download
+            if MEROPS_RAW.exists():
+                MEROPS_RAW.unlink()
+
+            raise RuntimeError(
+                "MEROPS database download failed.\n"
+                f"URL: {MEROPS_URL}\n"
+                f"Reason: {exc}"
+            ) from exc
+
+
+    # Verify downloaded file
+
+    if not (
+        MEROPS_RAW.exists()
+        and MEROPS_RAW.stat().st_size > 0
+    ):
+
+        raise RuntimeError(
+            "MEROPS database file is missing or empty:\n"
+            f"{MEROPS_RAW}"
         )
 
-    if not MEROPS_RAW.exists() or MEROPS_RAW.stat().st_size == 0:
-        raise RuntimeError(
-            f"MEROPS download failed or produced an empty file: {MEROPS_RAW}"
-        )
+    log.info(
+        "MEROPS raw database ready: %s",
+        MEROPS_RAW,
+    )
 
 
     # Convert MEROPS library to FASTA
 
-    if not MEROPS_FASTA.exists() or MEROPS_FASTA.stat().st_size == 0:
+    if not (
+        MEROPS_FASTA.exists()
+        and MEROPS_FASTA.stat().st_size > 0
+    ):
 
-        log.info("Converting MEROPS library to FASTA...")
+        log.info(
+            "Converting MEROPS library to FASTA..."
+        )
 
         count = 0
 
@@ -107,9 +173,19 @@ def download_and_prepare_merops():
             encoding="utf-8",
         ) as outfile:
 
-            for record in SeqIO.parse(infile, "fasta"):
+            for record in SeqIO.parse(
+                infile,
+                "fasta",
+            ):
+
                 record.seq = record.seq.upper()
-                SeqIO.write(record, outfile, "fasta")
+
+                SeqIO.write(
+                    record,
+                    outfile,
+                    "fasta",
+                )
+
                 count += 1
 
         if count == 0:
@@ -117,14 +193,22 @@ def download_and_prepare_merops():
                 "MEROPS database contains no FASTA sequences."
             )
 
-        log.info("MEROPS FASTA sequences prepared: %d", count)
+        log.info(
+            "MEROPS FASTA sequences prepared: %d",
+            count,
+        )
 
-   
+ 
     # Build DIAMOND database
-  
-    if not MEROPS_DMND.exists() or MEROPS_DMND.stat().st_size == 0:
 
-        log.info("Building DIAMOND MEROPS database...")
+    if not (
+        MEROPS_DMND.exists()
+        and MEROPS_DMND.stat().st_size > 0
+    ):
+
+        log.info(
+            "Building DIAMOND MEROPS database..."
+        )
 
         subprocess.run(
             [
@@ -138,30 +222,46 @@ def download_and_prepare_merops():
             check=True,
         )
 
-    if not MEROPS_DMND.exists():
+    if not (
+        MEROPS_DMND.exists()
+        and MEROPS_DMND.stat().st_size > 0
+    ):
+
         raise RuntimeError(
-            f"DIAMOND database was not created: {MEROPS_DMND}"
+            "DIAMOND database was not created:\n"
+            f"{MEROPS_DMND}"
         )
 
     log.info("MEROPS database ready.")
 
 
+
+# DIAMOND screening
+
 def run_diamond(query_faa):
     """Run DIAMOND BLASTP against MEROPS."""
 
-    DIAMOND_RESULTS.parent.mkdir(parents=True, exist_ok=True)
+    DIAMOND_RESULTS.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     cmd = [
         "diamond",
         "blastp",
+
         "--query",
         str(query_faa),
+
         "--db",
         str(MEROPS_DMND),
+
         "--out",
         str(DIAMOND_RESULTS),
+
         "--outfmt",
         "6",
+
         "qseqid",
         "sseqid",
         "stitle",
@@ -177,19 +277,26 @@ def run_diamond(query_faa):
         "bitscore",
         "qlen",
         "slen",
+
         "--evalue",
         str(EVALUE_CUTOFF),
+
         "--max-target-seqs",
         str(MAX_TARGET_SEQS),
+
         "--threads",
         str(CPU_THREADS),
     ]
 
-    subprocess.run(cmd, check=True)
+    subprocess.run(
+        cmd,
+        check=True,
+    )
 
+# MEROPS family extraction
 
 def extract_merops_family(title):
-    """Extract MEROPS family from subject title."""
+    """Extract MEROPS family from a MEROPS subject title."""
 
     if pd.isna(title):
         return "Unknown"
@@ -209,8 +316,14 @@ def extract_merops_family(title):
         text,
     )
 
-    return match.group(1) if match else "Unknown"
+    return (
+        match.group(1)
+        if match
+        else "Unknown"
+    )
 
+
+# MEROPS annotation extraction
 
 def extract_merops_annotation(title):
     """Extract annotation from MEROPS subject title."""
@@ -235,6 +348,9 @@ def extract_merops_annotation(title):
     return text.strip() or "NA"
 
 
+
+# MEROPS hit classification
+
 def classify_merops_hit(row):
     """Classify an individual MEROPS hit."""
 
@@ -256,26 +372,39 @@ def classify_merops_hit(row):
     return "PASS"
 
 
-def screen_merops(prokka_faa, prokka_annotation_map):
-    """Run MEROPS screening pipeline."""
+def screen_merops(
+    prokka_faa,
+    prokka_annotation_map,
+):
+    """Run the complete MEROPS screening pipeline."""
 
     stage("MEROPS PROTEASE SCREENING")
 
+    # Prepare MEROPS
     download_and_prepare_merops()
 
+    # Run DIAMOND
     run_diamond(prokka_faa)
 
+    # Check DIAMOND output
+ 
     if (
         not DIAMOND_RESULTS.exists()
         or DIAMOND_RESULTS.stat().st_size == 0
     ):
-        log.warning("No DIAMOND hits against MEROPS.")
+
+        log.warning(
+            "No DIAMOND hits against MEROPS."
+        )
 
         return (
             pd.DataFrame(),
             pd.DataFrame(),
             pd.DataFrame(),
         )
+
+    # Read DIAMOND results
+
 
     df = pd.read_csv(
         DIAMOND_RESULTS,
@@ -284,7 +413,7 @@ def screen_merops(prokka_faa, prokka_annotation_map):
     )
 
 
-    # Numeric conversion
+    # Convert numeric columns
 
     numeric_cols = [
         "Percent_Identity",
@@ -302,32 +431,44 @@ def screen_merops(prokka_faa, prokka_annotation_map):
     ]
 
     for column in numeric_cols:
+
         df[column] = pd.to_numeric(
             df[column],
             errors="coerce",
         )
 
-    # Coverage
+
+    # Calculate coverage
 
     df["Query_Coverage"] = (
-        (df["Qend"] - df["Qstart"] + 1)
+        (
+            df["Qend"]
+            - df["Qstart"]
+            + 1
+        )
         / df["Query_Length"]
     ) * 100
 
     df["Subject_Coverage"] = (
-        (df["Send"] - df["Sstart"] + 1)
+        (
+            df["Send"]
+            - df["Sstart"]
+            + 1
+        )
         / df["Subject_Length"]
     ) * 100
 
  
-    # MEROPS annotation
-   
-    df["MEROPS_Family"] = df["Subject_Title"].apply(
-        extract_merops_family
+    # MEROPS annotations
+
+    df["MEROPS_Family"] = (
+        df["Subject_Title"]
+        .apply(extract_merops_family)
     )
 
-    df["MEROPS_Annotation"] = df["Subject_Title"].apply(
-        extract_merops_annotation
+    df["MEROPS_Annotation"] = (
+        df["Subject_Title"]
+        .apply(extract_merops_annotation)
     )
 
     df["Prokka_Annotation"] = (
@@ -336,7 +477,7 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .fillna("")
     )
 
-
+  
     # Hit classification
 
     df["Status"] = df.apply(
@@ -344,13 +485,14 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         axis=1,
     )
 
+    # Save all hits
     df.to_csv(
         RESULTS_DIR / "MEROPS_all_hits.csv",
         index=False,
     )
 
-  
-    # Best hit per query
+
+    # Best hit per protein
 
     best_hits = (
         df.sort_values(
@@ -374,6 +516,8 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .copy()
     )
 
+
+    # PASS hits
     passed = (
         best_hits[
             best_hits["Status"] == "PASS"
@@ -385,6 +529,8 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .copy()
     )
 
+  
+    # Failed hits
     failed = (
         best_hits[
             best_hits["Status"] != "PASS"
@@ -396,7 +542,7 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         .copy()
     )
 
-
+   
     # No-hit proteins
 
     all_query_ids = set(
@@ -408,12 +554,15 @@ def screen_merops(prokka_faa, prokka_annotation_map):
     )
 
     no_hit_ids = (
-        all_query_ids - hit_ids
+        all_query_ids
+        - hit_ids
     )
 
     nohit_rows = []
 
-    for protein_id in sorted(no_hit_ids):
+    for protein_id in sorted(
+        no_hit_ids
+    ):
 
         nohit_rows.append(
             {
@@ -432,9 +581,7 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         nohit_rows
     )
 
-
     # Save outputs
-
     passed.to_csv(
         MEROPS_PASS,
         index=False,
@@ -450,9 +597,7 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         index=False,
     )
 
-
     # Summary
-   
     summary = pd.DataFrame(
         {
             "Metric": [
@@ -484,4 +629,8 @@ def screen_merops(prokka_faa, prokka_annotation_map):
         len(no_hit_ids),
     )
 
-    return df, passed, failed
+    return (
+        df,
+        passed,
+        failed,
+    )
