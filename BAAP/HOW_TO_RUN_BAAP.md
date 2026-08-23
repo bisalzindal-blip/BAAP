@@ -24,7 +24,7 @@ Google Colab provides the computational environment required to run BAAP.
 
 Open a new Google Colab notebook:
 
-[![Open in Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)
+[![Open in Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github.com/bisalzindal-blip/Bacterial-Annotation-Analysis-of-Proteases/blob/main/BAAP/notebooks/BAAP_Colab.ipynb)
 
 You can also create a notebook directly from your BAAP repository and
 copy the installation cell below into the notebook.
